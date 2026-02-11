@@ -12,17 +12,33 @@ model = genai.GenerativeModel('gemini-1.5-pro')
 
 st.title("📸 EpicSky AI")
 
-# --- OBTENCIÓN DE COORDENADAS ---
+# --- OBTENCIÓN DE COORDENADAS MEJORADA ---
 st.subheader("📍 Ubicación")
-loc = streamlit_js_eval(js_expressions="str([coords.latitude, coords.longitude])", key="GPS")
+col_gps, col_manual = st.columns([2, 1])
+
+with col_gps:
+    loc = streamlit_js_eval(js_expressions="str([coords.latitude, coords.longitude])", key="GPS_FIX")
+
+lat, lon = None, None
 
 if loc:
-    lat_lon = eval(loc)
-    lat, lon = lat_lon[0], lat_lon[1]
-    st.success(f"Coordenadas fijadas: {lat}, {lon}")
-else:
-    st.warning("Esperando GPS... Asegúrate de dar permisos en tu móvil.")
-    lat, lon = 40.41, -3.70 # Madrid por defecto si falla
+    try:
+        lat_lon = eval(loc)
+        lat, lon = lat_lon[0], lat_lon[1]
+        st.success(f"GPS detectado: {lat}, {lon}")
+    except:
+        st.error("Error leyendo GPS.")
+
+if not lat:
+    with col_manual:
+        manual_city = st.text_input("O escribe tu ciudad:")
+        if manual_city:
+            # Usamos una búsqueda rápida para obtener coordenadas de la ciudad
+            geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={manual_city}&limit=1&appid={WEATHER_API_KEY}"
+            geo_data = requests.get(geo_url).json()
+            if geo_data:
+                lat, lon = geo_data[0]['lat'], geo_data[0]['lon']
+                st.success(f"Ubicación manual: {geo_data[0]['name']}")
 
 # --- FUNCIÓN DE CLIMA ---
 def obtener_clima(lat, lon):
