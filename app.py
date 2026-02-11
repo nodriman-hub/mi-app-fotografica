@@ -8,7 +8,7 @@ GEMINI_API_KEY = st.secrets["GEMINI_KEY"]
 WEATHER_API_KEY = st.secrets["WEATHER_KEY"]
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash')
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 st.title("📸 EpicSky AI")
 
@@ -60,26 +60,28 @@ def enviar_notificacion(mensaje):
     requests.post("https://ntfy.sh/epic_sky_fotografo_2026", 
                   data=mensaje.encode('utf-8'))
     
-# --- ANÁLISIS CON ESCUDO ---
-if st.button("Analizar probabilidad de Candilazo"):
-    try:
-        clima = obtener_clima(lat, lon)
-        
-        prompt = f"""
-        Actúa como fotógrafo experto. Datos actuales: {clima['nubes_totales']}% de nubes, 
-        humedad {clima['humedad']}%, clima: {clima['descripcion']}.
-        Calcula la probabilidad (0-100%) de que el atardecer/amanecer sea colorido. 
-        Da una respuesta corta y un consejo técnico de cámara.
-        """
-        
-        response = model.generate_content(prompt)
-        st.metric(label="Probabilidad de Épica", value=f"{clima['nubes_totales']}% nubes detectadas")
-        st.write(response.text)
-        
-    except Exception as e:
-        st.error(f"Hubo un problema con el cerebro de la app: {e}")
-        st.info("Consejo: Verifica que tu API KEY de Google sea la correcta en Settings > Secrets.")
-
+# --- ANÁLISIS OPTIMIZADO PARA NO AGOTAR CRÉDITOS ---
+if st.button("🚀 Calcular Probabilidad de Épica"):
+    with st.spinner('Consultando a los dioses del clima...'):
+        try:
+            clima = obtener_clima(lat, lon)
+            
+            # Unimos los datos en un mensaje súper corto para ahorrar "tokens" (créditos)
+            prompt = f"Clima: {clima['descripcion']}, Nubes: {clima['nubes_totales']}%, Humedad: {clima['humedad']}%. Probabilidad de atardecer épico (0-100%) y un tip breve."
+            
+            response = model.generate_content(prompt)
+            
+            # Mostramos el resultado de forma visual
+            st.balloons() # ¡Un poco de celebración si funciona!
+            st.metric(label="Probabilidad", value=f"{clima['nubes_totales']}% nubes")
+            st.markdown(f"### 🤖 Predicción de EpicSky:")
+            st.write(response.text)
+            
+        except Exception as e:
+            if "429" in str(e):
+                st.error("⚠️ Google está saturado. Espera 1 minuto y vuelve a pulsar el botón.")
+            else:
+                st.error(f"Error inesperado: {e}")
 # --- AUTO-REFRESH (Cada 30 min) ---
 st.caption("La app se actualiza automáticamente cada 30 minutos.")
 # Esto fuerza a la app a recargarse
