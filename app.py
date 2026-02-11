@@ -1,14 +1,19 @@
-import streamlit as st
-import requests
-import google.generativeai as genai
-from streamlit_js_eval import streamlit_js_eval
+# --- INICIALIZACIÓN INTELIGENTE ---
+model_names = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro']
+model = None
 
-# Configuración de APIs
-GEMINI_API_KEY = st.secrets["GEMINI_KEY"]
-WEATHER_API_KEY = st.secrets["WEATHER_KEY"]
+for name in model_names:
+    try:
+        model = genai.GenerativeModel(name)
+        # Probamos una respuesta minúscula para ver si el modelo responde
+        test_response = model.generate_content("hola", generation_config={"max_output_tokens": 1})
+        st.sidebar.success(f"Cerebro conectado: {name}")
+        break
+    except:
+        continue
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+if not model:
+    st.error("No se pudo conectar con ningún modelo de Google. Revisa tu API Key.")
 
 st.title("📸 EpicSky AI")
 
