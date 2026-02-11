@@ -60,20 +60,25 @@ def enviar_notificacion(mensaje):
     requests.post("https://ntfy.sh/epic_sky_fotografo_2026", 
                   data=mensaje.encode('utf-8'))
     
-# --- ANÁLISIS ---
+# --- ANÁLISIS CON ESCUDO ---
 if st.button("Analizar probabilidad de Candilazo"):
-    clima = obtener_clima(lat, lon)
-    
-    prompt = f"""
-    Actúa como fotógrafo experto. Datos actuales: {clima['nubes_totales']}% de nubes, 
-    humedad {clima['humedad']}%, clima: {clima['descripcion']}.
-    Calcula la probabilidad (0-100%) de que el atardecer/amanecer sea colorido. 
-    Da una respuesta corta y un consejo técnico de cámara.
-    """
-    
-    response = model.generate_content(prompt)
-    st.metric(label="Probabilidad de Épica", value=f"{clima['nubes_totales']}% nubes detectadas")
-    st.write(response.text)
+    try:
+        clima = obtener_clima(lat, lon)
+        
+        prompt = f"""
+        Actúa como fotógrafo experto. Datos actuales: {clima['nubes_totales']}% de nubes, 
+        humedad {clima['humedad']}%, clima: {clima['descripcion']}.
+        Calcula la probabilidad (0-100%) de que el atardecer/amanecer sea colorido. 
+        Da una respuesta corta y un consejo técnico de cámara.
+        """
+        
+        response = model.generate_content(prompt)
+        st.metric(label="Probabilidad de Épica", value=f"{clima['nubes_totales']}% nubes detectadas")
+        st.write(response.text)
+        
+    except Exception as e:
+        st.error(f"Hubo un problema con el cerebro de la app: {e}")
+        st.info("Consejo: Verifica que tu API KEY de Google sea la correcta en Settings > Secrets.")
 
 # --- AUTO-REFRESH (Cada 30 min) ---
 st.caption("La app se actualiza automáticamente cada 30 minutos.")
