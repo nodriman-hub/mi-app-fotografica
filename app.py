@@ -55,6 +55,11 @@ def obtener_clima(lat, lon):
         "humedad": next_forecast['main']['humidity']
     }
 
+def enviar_notificacion(mensaje):
+    # 'epic_sky_tu_nombre' es un canal único que te inventes
+    requests.post("https://ntfy.sh/epic_sky_fotografo_2026", 
+                  data=mensaje.encode('utf-8'))
+    
 # --- ANÁLISIS ---
 if st.button("Analizar probabilidad de Candilazo"):
     clima = obtener_clima(lat, lon)
