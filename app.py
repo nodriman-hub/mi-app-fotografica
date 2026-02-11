@@ -1,93 +1,95 @@
-# --- INICIALIZACIÓN INTELIGENTE ---
-model_names = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-pro']
-model = None
+import streamlit as st
+import requests
+import google.generativeai as genai
+from streamlit_js_eval import streamlit_js_eval
 
-for name in model_names:
-    try:
-        model = genai.GenerativeModel(name)
-        # Probamos una respuesta minúscula para ver si el modelo responde
-        test_response = model.generate_content("hola", generation_config={"max_output_tokens": 1})
-        st.sidebar.success(f"Cerebro conectado: {name}")
-        break
-    except:
-        continue
+# 1. CONFIGURACIÓN INICIAL
+st.set_page_config(page_title="EpicSky AI", page_icon="📸")
 
-if not model:
-    st.error("No se pudo conectar con ningún modelo de Google. Revisa tu API Key.")
+# Recuperar llaves de los Secrets
+try:
+    GEMINI_API_KEY = st.secrets["GEMINI_KEY"]
+    WEATHER_API_KEY = st.secrets["WEATHER_KEY"]
+    genai.configure(api_key=GEMINI_API_KEY)
+except Exception as e:
+    st.error("Error con las llaves API en Secrets. Revisa la configuración.")
+    st.stop()
 
+# 2. CONECTAR CON EL CEREBRO (SISTEMA MULTI-MODELO)
+@st.cache_resource
+def conectar_modelo():
+    model_names = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+    for name in model_names:
+        try:
+            m = genai.GenerativeModel(name)
+            # Prueba rápida
+            m.generate_content("test", generation_config={"max_output_tokens": 1})
+            return m, name
+        except:
+            continue
+    return None, None
+
+model, model_name = conectar_modelo()
+
+if model_name:
+    st.sidebar.success(f"Cerebro: {model_name}")
+else:
+    st.sidebar.error("Sin conexión con Google AI")
+
+# 3. INTERFAZ DE USUARIO
 st.title("📸 EpicSky AI")
+st.markdown("---")
 
-# --- OBTENCIÓN DE COORDENADAS MEJORADA ---
-st.subheader("📍 Ubicación")
-col_gps, col_manual = st.columns([2, 1])
-
-with col_gps:
-    loc = streamlit_js_eval(js_expressions="str([coords.latitude, coords.longitude])", key="GPS_FIX")
+# Ubicación
+st.subheader("📍 ¿Dónde estamos?")
+gps_location = streamlit_js_eval(js_expressions="str([coords.latitude, coords.longitude])", key="GPS")
+manual_location = st.text_input("O escribe tu ciudad manualmente (ej: Madrid, ES):")
 
 lat, lon = None, None
 
-if loc:
-    try:
-        lat_lon = eval(loc)
-        lat, lon = lat_lon[0], lat_lon[1]
-        st.success(f"GPS detectado: {lat}, {lon}")
-    except:
-        st.error("Error leyendo GPS.")
+if manual_location:
+    geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={manual_location}&limit=1&appid={WEATHER_API_KEY}"
+    res = requests.get(geo_url).json()
+    if res:
+        lat, lon = res[0]['lat'], res[0]['lon']
+        st.write(f"Ubicación fijada en: **{res[0]['name']}**")
+elif gps_location:
+    coords = eval(gps_location)
+    lat, lon = coords[0], coords[1]
+    st.write(f"Ubicación fijada por **GPS**")
+else:
+    st.info("Esperando ubicación... (Si estás en móvil, activa el GPS)")
 
-if not lat:
-    with col_manual:
-        manual_city = st.text_input("O escribe tu ciudad:")
-        if manual_city:
-            # Usamos una búsqueda rápida para obtener coordenadas de la ciudad
-            geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={manual_city}&limit=1&appid={WEATHER_API_KEY}"
-            geo_data = requests.get(geo_url).json()
-            if geo_data:
-                lat, lon = geo_data[0]['lat'], geo_data[0]['lon']
-                st.success(f"Ubicación manual: {geo_data[0]['name']}")
+# 4. LÓGICA DE ANÁLISIS
+if st.button("🚀 Analizar cielo ahora"):
+    if not lat or not lon:
+        st.warning("Necesito una ubicación para consultar el clima.")
+    else:
+        with st.spinner("Analizando capas de nubes..."):
+            try:
+                w_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric&lang=es"
+                w_data = requests.get(w_url).json()
+                
+                nubes = w_data['clouds']['all']
+                desc = w_data['weather'][0]['description']
+                hum = w_data['main']['humidity']
+                
+                prompt = f"Actúa como fotógrafo. Clima: {desc}, Nubes: {nubes}%, Humedad: {hum}%. Predice la probabilidad de un atardecer/amanecer épico (0-100%) y da un consejo de exposición."
+                
+                response = model.generate_content(prompt)
+                
+                st.balloons()
+                st.metric("Probabilidad de Épica", f"{nubes}% nubes")
+                st.markdown(f"### 🤖 Análisis de EpicSky:\n{response.text}")
+                
+            except Exception as e:
+                st.error(f"Error en el análisis: {e}")
 
-# --- FUNCIÓN DE CLIMA ---
-def obtener_clima(lat, lon):
-    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={WEATHER_API_KEY}&units=metric&lang=es"
-    data = requests.get(url).json()
-    # Extraemos el pronóstico más cercano (próximas 3 horas)
-    next_forecast = data['list'][0]
-    return {
-        "nubes_totales": next_forecast['clouds']['all'],
-        "temp": next_forecast['main']['temp'],
-        "descripcion": next_forecast['weather'][0]['description'],
-        # Nota: OpenWeather free a veces no desglosa nubes altas/bajas detalladas, 
-        # pero Gemini puede inferirlo por la descripción y humedad.
-        "humedad": next_forecast['main']['humidity']
-    }
+# 5. APRENDIZAJE Y FEEDBACK
+st.markdown("---")
+st.subheader("📉 ¿Cómo fue el cielo anterior?")
+feedback = st.radio("Ayúdame a mejorar:", ["Sin feedback", "✅ Fue un candilazo", "❌ Estuvo soso"], horizontal=True)
 
-def enviar_notificacion(mensaje):
-    # 'epic_sky_tu_nombre' es un canal único que te inventes
-    requests.post("https://ntfy.sh/epic_sky_fotografo_2026", 
-                  data=mensaje.encode('utf-8'))
-    
-# --- ANÁLISIS OPTIMIZADO PARA NO AGOTAR CRÉDITOS ---
-if st.button("🚀 Calcular Probabilidad de Épica"):
-    with st.spinner('Consultando a los dioses del clima...'):
-        try:
-            clima = obtener_clima(lat, lon)
-            
-            # Unimos los datos en un mensaje súper corto para ahorrar "tokens" (créditos)
-            prompt = f"Clima: {clima['descripcion']}, Nubes: {clima['nubes_totales']}%, Humedad: {clima['humedad']}%. Probabilidad de atardecer épico (0-100%) y un tip breve."
-            
-            response = model.generate_content(prompt)
-            
-            # Mostramos el resultado de forma visual
-            st.balloons() # ¡Un poco de celebración si funciona!
-            st.metric(label="Probabilidad", value=f"{clima['nubes_totales']}% nubes")
-            st.markdown(f"### 🤖 Predicción de EpicSky:")
-            st.write(response.text)
-            
-        except Exception as e:
-            if "429" in str(e):
-                st.error("⚠️ Google está saturado. Espera 1 minuto y vuelve a pulsar el botón.")
-            else:
-                st.error(f"Error inesperado: {e}")
-# --- AUTO-REFRESH (Cada 30 min) ---
-st.caption("La app se actualiza automáticamente cada 30 minutos.")
-# Esto fuerza a la app a recargarse
-# st.empty()
+if feedback != "Sin feedback":
+    st.success("¡Gracias! He registrado el dato para ajustar mis futuras predicciones.")
+    # Aquí en el futuro conectaremos una base de datos para que Gemini lea tus éxitos.
